@@ -60,6 +60,10 @@
   .capture-card.flash{animation:cardFlash .45s ease;}
   @keyframes cardFlash{0%{background:var(--green-bg);border-color:var(--green-bd)}100%{background:var(--surface);border-color:var(--border)}}
   .card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);margin-bottom:.9rem;}
+  .scan-input{width:100%;height:48px;padding:0 14px;border-radius:var(--r);border:1.5px solid var(--blue-bd);background:var(--blue-bg);color:var(--text);font-family:var(--mono);font-size:16px;letter-spacing:.5px;text-align:center;outline:none;margin-bottom:1rem;transition:border-color .15s,box-shadow .15s,opacity .15s;}
+  .scan-input:focus{box-shadow:0 0 0 3px rgba(100,150,230,.18);}
+  .scan-input::placeholder{color:var(--blue-tx);opacity:.55;font-size:12px;letter-spacing:0;font-family:inherit;}
+  .scan-input.hidden{display:none;}
   .field-group{display:flex;flex-direction:column;gap:8px;}
   .field-row{display:flex;align-items:center;gap:9px;}
   .field-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);width:34px;flex-shrink:0;text-align:right;}
@@ -68,9 +72,8 @@
   .field-input:disabled{opacity:.4;cursor:not-allowed;}
   .field-input.is-active{border-color:var(--blue-bd);background:var(--blue-bg);box-shadow:0 0 0 3px rgba(100,150,230,.12);}
   .field-input.is-filled{border-color:var(--green-bd);background:var(--green-bg);color:var(--green-tx);}
-  .field-input.is-error{border-color:var(--red-bd);background:var(--red-bg);color:var(--red-tx);}
-  @keyframes errShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
-  .field-input.is-error{animation:errShake .3s ease;}
+  .field-input.flash{animation:fieldFlash .5s ease;}
+  @keyframes fieldFlash{0%{background:var(--green-bd);border-color:var(--green-tx);color:var(--surface);}100%{background:var(--green-bg);border-color:var(--green-bd);color:var(--green-tx);}}
   .field-check{width:20px;height:20px;border-radius:50%;flex-shrink:0;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text3);transition:all .15s;}
   .field-check.done{background:var(--green-bg);border-color:var(--green-bd);color:var(--green-tx);}
   .progress-bar{height:3px;background:var(--border);border-radius:2px;margin-top:.9rem;overflow:hidden;}
@@ -98,8 +101,6 @@
   td.row-num{color:var(--text3);font-size:10px;width:28px;}
   tr.new-row td{animation:rowFlash .7s ease;}
   @keyframes rowFlash{0%{background:var(--green-bg)}100%{background:transparent}}
-  tr.dup-row td{animation:dupFlash 1.8s ease;}
-  @keyframes dupFlash{0%,45%{background:var(--red-bg)}100%{background:transparent}}
   .empty-state{padding:1.75rem;text-align:center;color:var(--text3);font-size:12px;}
 
   .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:7px 15px;border-radius:var(--r);font-size:12px;opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap;z-index:99;}
@@ -154,20 +155,21 @@
 
   <div class="capture-card" id="capture-card">
     <div class="card-title">Caja actual</div>
+    <input class="scan-input" id="scan-input" placeholder="Escanea aqu&iacute;&hellip;" autocomplete="off" inputmode="none" />
     <div class="field-group">
       <div class="field-row">
         <span class="field-label">EAN</span>
-        <input class="field-input is-active" id="f-ean" placeholder="escanea EAN" autocomplete="off" inputmode="none" />
+        <input class="field-input is-active" id="f-ean" placeholder="esperando EAN" tabindex="-1" readonly />
         <div class="field-check" id="c-ean">1</div>
       </div>
       <div class="field-row">
         <span class="field-label">S/N</span>
-        <input class="field-input" id="f-sn" placeholder="escanea n&uacute;m. de serie" autocomplete="off" inputmode="none" disabled />
+        <input class="field-input" id="f-sn" placeholder="esperando n&uacute;m. de serie" tabindex="-1" readonly />
         <div class="field-check" id="c-sn">2</div>
       </div>
       <div class="field-row">
         <span class="field-label">P/N</span>
-        <input class="field-input" id="f-pn" placeholder="escanea n&uacute;m. de parte" autocomplete="off" inputmode="none" disabled />
+        <input class="field-input" id="f-pn" placeholder="esperando n&uacute;m. de parte" tabindex="-1" readonly />
         <div class="field-check" id="c-pn">3</div>
       </div>
     </div>
@@ -216,6 +218,7 @@ const inputs = ['ean','sn','pn'].map(id => document.getElementById('f-'+id));
 const checks = ['ean','sn','pn'].map(id => document.getElementById('c-'+id));
 const card   = document.getElementById('capture-card');
 const prog   = document.getElementById('progress');
+const scan   = document.getElementById('scan-input');
 
 setInterval(() => {
   const m = Math.floor((Date.now()-sessionStart)/60000);
@@ -224,10 +227,9 @@ setInterval(() => {
 
 function setActive(idx) {
   inputs.forEach((inp,i) => {
-    inp.disabled = mode==='camera' ? true : i!==idx;
     inp.classList.remove('is-active','is-filled');
     if(i<idx) inp.classList.add('is-filled');
-    if(i===idx && mode==='scanner') inp.classList.add('is-active');
+    if(i===idx) inp.classList.add('is-active');
   });
   checks.forEach((c,i) => {
     c.classList.remove('done');
@@ -237,44 +239,29 @@ function setActive(idx) {
   prog.style.width=((idx/3)*100)+'%';
   prog.classList.toggle('complete',idx===3);
   document.getElementById('stat-scan').textContent=(Math.min(idx,2)+1)+' / 3';
-  if(mode==='scanner'&&idx<3) setTimeout(()=>inputs[idx].focus(),30);
+  if(mode==='scanner'&&idx<3) focusScan();
   if(mode==='camera') updateCamLabel(idx);
 }
 
-function advance(idx) {
-  const val=inputs[idx].value.trim();
-  if(!val) return;
-  if(idx===1) {
-    const dup=rows.findIndex(r=>r[1].trim()===val);
-    if(dup!==-1){ rejectDuplicateSN(dup); return; }
-  }
-  current=idx+1;
-  if(current===3) commitRow();
+// Single point of entry: every scan (USB keyboard or camera) lands here.
+// Ingests the value into the current field, flashes it, and auto-commits
+// the row once all three numbers are captured.
+function ingest(value) {
+  value=(value||'').trim();
+  if(current>=3||!value) return;
+  const inp=inputs[current];
+  inp.value=value;
+  inp.classList.add('is-filled');
+  inp.classList.remove('flash'); void inp.offsetWidth; inp.classList.add('flash');
+  current++;
+  if(current===3) setTimeout(commitRow,200);
   else setActive(current);
 }
 
-function rejectDuplicateSN(dupIndex) {
-  const inp=inputs[1];
-  inp.value=''; inp.classList.remove('is-filled');
-  inp.classList.remove('is-error'); void inp.offsetWidth; inp.classList.add('is-error');
-  setTimeout(()=>inp.classList.remove('is-error'),1800);
-  showToast('S/N ya capturado en la fila '+(dupIndex+1));
-  highlightRow(dupIndex);
-  if(mode==='scanner') setTimeout(()=>inp.focus(),30);
-}
-
-function highlightRow(dupIndex) {
-  const tr=document.querySelector('#data-body tr[data-row="'+dupIndex+'"]');
-  if(!tr) return;
-  tr.classList.remove('dup-row'); void tr.offsetWidth; tr.classList.add('dup-row');
-  tr.scrollIntoView({block:'nearest',behavior:'smooth'});
-}
-
-function fillCurrent(value) {
-  if(current>=3||!value.trim()) return;
-  inputs[current].value=value.trim();
-  inputs[current].classList.add('is-filled');
-  setTimeout(()=>advance(current),130);
+function focusScan() {
+  scan.value='';
+  scan.classList.remove('hidden');
+  setTimeout(()=>scan.focus(),30);
 }
 
 function commitRow() {
@@ -289,20 +276,29 @@ function commitRow() {
 
 function resetFields() {
   current=0;
-  inputs.forEach(inp=>{inp.value='';inp.disabled=true;inp.classList.remove('is-active','is-filled');});
+  inputs.forEach(inp=>{inp.value='';inp.classList.remove('is-active','is-filled','flash');});
+  scan.value='';
   prog.style.width='0%'; prog.classList.remove('complete');
   setTimeout(()=>setActive(0),60);
 }
 
-inputs.forEach((inp,idx)=>{
-  inp.addEventListener('keydown',e=>{
-    if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();advance(idx);}
-  });
-  inp.addEventListener('input',()=>{
-    if(current!==idx) return;
-    clearTimeout(inp._t);
-    inp._t=setTimeout(()=>{if(inp.value.trim()) advance(idx);},100);
-  });
+// USB scanners type the code then emit Enter; the input debounce is a fallback
+// for scanners configured without a terminator.
+function commitScan() {
+  const v=scan.value;
+  scan.value='';
+  ingest(v);
+}
+scan.addEventListener('keydown',e=>{
+  if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();commitScan();}
+});
+scan.addEventListener('input',()=>{
+  clearTimeout(scan._t);
+  scan._t=setTimeout(()=>{if(scan.value.trim()) commitScan();},120);
+});
+// Keep the scan input focused in scanner mode so reads never miss their target.
+document.addEventListener('click',()=>{
+  if(mode==='scanner'&&current<3) setTimeout(()=>scan.focus(),0);
 });
 
 function setMode(m) {
@@ -312,6 +308,7 @@ function setMode(m) {
   const panel=document.getElementById('camera-panel');
   const note=document.getElementById('info-note');
   if(m==='camera') {
+    scan.classList.add('hidden');
     panel.classList.add('visible');
     const secure=location.protocol==='https:'||/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     if(!secure) {
@@ -328,7 +325,7 @@ function setMode(m) {
     note.classList.remove('visible');
     stopCamera();
     setActive(current);
-    if(inputs[current]) setTimeout(()=>inputs[current].focus(),60);
+    if(current<3) focusScan();
   }
 }
 
@@ -353,7 +350,7 @@ async function startCamera() {
       const now=Date.now();
       if(txt===lastCode&&now-lastCodeTime<1800) return;
       lastCode=txt; lastCodeTime=now;
-      fillCurrent(txt);
+      ingest(txt);
     });
     const stream=videoEl.srcObject;
     if(stream) {
@@ -430,7 +427,7 @@ function showToast(msg) {
 }
 
 setActive(0);
-inputs[0].focus();
+scan.focus();
 </script>
 </body>
 </html>
