@@ -64,6 +64,8 @@
   .scan-input:focus{box-shadow:0 0 0 3px rgba(100,150,230,.18);}
   .scan-input::placeholder{color:var(--blue-tx);opacity:.55;font-size:12px;letter-spacing:0;font-family:inherit;}
   .scan-input.hidden{display:none;}
+  .scan-input.flash{animation:scanReject .4s ease;}
+  @keyframes scanReject{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
   .field-group{display:flex;flex-direction:column;gap:8px;}
   .field-row{display:flex;align-items:center;gap:9px;}
   .field-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);width:34px;flex-shrink:0;text-align:right;}
@@ -210,7 +212,6 @@
 
 <script>
 const rows = [];
-let current = 0;
 let mode = 'scanner';
 const sessionStart = Date.now();
 
@@ -225,37 +226,50 @@ setInterval(() => {
   document.getElementById('stat-time').textContent = m+'m';
 }, 15000);
 
-function setActive(idx) {
-  inputs.forEach((inp,i) => {
-    inp.classList.remove('is-active','is-filled');
-    if(i<idx) inp.classList.add('is-filled');
-    if(i===idx) inp.classList.add('is-active');
-  });
-  checks.forEach((c,i) => {
-    c.classList.remove('done');
-    if(i<idx){c.classList.add('done');c.textContent='✓';}
-    else c.textContent=i+1;
-  });
-  prog.style.width=((idx/3)*100)+'%';
-  prog.classList.toggle('complete',idx===3);
-  document.getElementById('stat-scan').textContent=(Math.min(idx,2)+1)+' / 3';
-  if(mode==='scanner'&&idx<3) focusScan();
-  if(mode==='camera') updateCamLabel(idx);
+// Route a scan to its field by structural format:
+//   contains a dot  -> P/N  (e.g. 1.0.99.01.10369-9002)
+//   contains letters -> S/N (e.g. BCAB26E02399)
+//   digits only      -> EAN (e.g. 6939554951329; spaces are visual grouping)
+// Returns the field index 0/1/2, or -1 if it matches none.
+function classify(value) {
+  if(value.includes('.')) return 2;        // P/N
+  if(/[A-Za-z]/.test(value)) return 1;      // S/N
+  if(/^[0-9 ]+$/.test(value)) return 0;     // EAN (spaces are visual grouping)
+  return -1;
 }
 
 // Single point of entry: every scan (USB keyboard or camera) lands here.
-// Ingests the value into the current field, flashes it, and auto-commits
-// the row once all three numbers are captured.
+// Routes the read to the matching field regardless of scan order, flashes it,
+// and auto-commits the row once all three are present. Re-scanning the same
+// kind just refills that field and flashes -- no error either way.
 function ingest(value) {
   value=(value||'').trim();
-  if(current>=3||!value) return;
-  const inp=inputs[current];
-  inp.value=value;
+  if(!value) return;
+  const idx=classify(value);
+  if(idx===-1){ flashScan('reject'); return; }
+  const inp=inputs[idx];
+  inp.value = idx===0 ? value.replace(/\s+/g,'') : value;
   inp.classList.add('is-filled');
   inp.classList.remove('flash'); void inp.offsetWidth; inp.classList.add('flash');
-  current++;
-  if(current===3) setTimeout(commitRow,200);
-  else setActive(current);
+  refreshProgress();
+  if(inputs.every(i=>i.value.trim())) setTimeout(commitRow,220);
+  if(mode==='scanner') focusScan();
+}
+
+// Reflect how many of the three fields are captured (order-independent).
+function refreshProgress() {
+  let n=0;
+  inputs.forEach((inp,i)=>{
+    const filled=!!inp.value.trim();
+    if(filled) n++;
+    inp.classList.toggle('is-filled',filled);
+    checks[i].classList.toggle('done',filled);
+    checks[i].textContent=filled?'✓':i+1;
+  });
+  prog.style.width=((n/3)*100)+'%';
+  prog.classList.toggle('complete',n===3);
+  document.getElementById('stat-scan').textContent=n+' / 3';
+  if(mode==='camera') updateCamLabel(n);
 }
 
 function focusScan() {
@@ -264,22 +278,37 @@ function focusScan() {
   setTimeout(()=>scan.focus(),30);
 }
 
+function flashScan(kind) {
+  scan.classList.remove('flash'); void scan.offsetWidth; scan.classList.add('flash');
+  setTimeout(()=>scan.classList.remove('flash'),450);
+}
+
 function commitRow() {
   const vals=inputs.map(f=>f.value.trim());
+  card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+  // Dedup on S/N (the per-unit identifier). If already captured, just flash the
+  // existing row and continue -- no second copy, no error.
+  const dup=rows.findIndex(r=>r[1]===vals[1]);
+  if(dup!==-1){ flashExistingRow(dup); resetFields(); return; }
   rows.push(vals);
   renderTable(true);
   document.getElementById('stat-boxes').textContent=rows.length;
   document.getElementById('table-count').textContent=rows.length+(rows.length===1?' registro':' registros');
-  card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
   resetFields();
 }
 
+function flashExistingRow(idx) {
+  const tr=document.querySelector('#data-body tr[data-row="'+idx+'"]');
+  if(!tr) return;
+  tr.classList.remove('new-row'); void tr.offsetWidth; tr.classList.add('new-row');
+  setTimeout(()=>tr.classList.remove('new-row'),700);
+  tr.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+
 function resetFields() {
-  current=0;
   inputs.forEach(inp=>{inp.value='';inp.classList.remove('is-active','is-filled','flash');});
   scan.value='';
-  prog.style.width='0%'; prog.classList.remove('complete');
-  setTimeout(()=>setActive(0),60);
+  setTimeout(()=>{refreshProgress(); if(mode==='scanner') focusScan();},60);
 }
 
 // USB scanners type the code then emit Enter; the input debounce is a fallback
@@ -298,7 +327,7 @@ scan.addEventListener('input',()=>{
 });
 // Keep the scan input focused in scanner mode so reads never miss their target.
 document.addEventListener('click',()=>{
-  if(mode==='scanner'&&current<3) setTimeout(()=>scan.focus(),0);
+  if(mode==='scanner') setTimeout(()=>scan.focus(),0);
 });
 
 function setMode(m) {
@@ -324,8 +353,8 @@ function setMode(m) {
     panel.classList.remove('visible');
     note.classList.remove('visible');
     stopCamera();
-    setActive(current);
-    if(current<3) focusScan();
+    refreshProgress();
+    focusScan();
   }
 }
 
@@ -362,7 +391,7 @@ async function startCamera() {
       }
     }
     st.textContent='Camara lista - apunta al codigo'; st.className='camera-status ok';
-    setActive(0);
+    refreshProgress();
   } catch(err) {
     st.textContent='Error: '+err.message; st.className='camera-status error';
   }
@@ -382,9 +411,9 @@ function toggleTorch() {
   document.getElementById('btn-torch').classList.toggle('btn-torch-on',torchOn);
 }
 
-function updateCamLabel(idx) {
-  const lbl=['EAN','S/N','P/N'];
-  document.getElementById('camera-label').textContent=idx<3?'Escanea -> '+lbl[idx]:'Caja capturada';
+function updateCamLabel(n) {
+  const pend=['EAN','S/N','P/N'].filter((_,i)=>!inputs[i].value.trim());
+  document.getElementById('camera-label').textContent=n>=3?'Caja capturada':'Escanea: '+pend.join(' - ');
 }
 
 function renderTable(highlight) {
@@ -426,7 +455,7 @@ function showToast(msg) {
   setTimeout(()=>t.classList.remove('show'),2200);
 }
 
-setActive(0);
+refreshProgress();
 scan.focus();
 </script>
 </body>
