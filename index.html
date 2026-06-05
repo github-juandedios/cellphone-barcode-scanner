@@ -68,6 +68,9 @@
   .field-input:disabled{opacity:.4;cursor:not-allowed;}
   .field-input.is-active{border-color:var(--blue-bd);background:var(--blue-bg);box-shadow:0 0 0 3px rgba(100,150,230,.12);}
   .field-input.is-filled{border-color:var(--green-bd);background:var(--green-bg);color:var(--green-tx);}
+  .field-input.is-error{border-color:var(--red-bd);background:var(--red-bg);color:var(--red-tx);}
+  @keyframes errShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+  .field-input.is-error{animation:errShake .3s ease;}
   .field-check{width:20px;height:20px;border-radius:50%;flex-shrink:0;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text3);transition:all .15s;}
   .field-check.done{background:var(--green-bg);border-color:var(--green-bd);color:var(--green-tx);}
   .progress-bar{height:3px;background:var(--border);border-radius:2px;margin-top:.9rem;overflow:hidden;}
@@ -95,6 +98,8 @@
   td.row-num{color:var(--text3);font-size:10px;width:28px;}
   tr.new-row td{animation:rowFlash .7s ease;}
   @keyframes rowFlash{0%{background:var(--green-bg)}100%{background:transparent}}
+  tr.dup-row td{animation:dupFlash 1.8s ease;}
+  @keyframes dupFlash{0%,45%{background:var(--red-bg)}100%{background:transparent}}
   .empty-state{padding:1.75rem;text-align:center;color:var(--text3);font-size:12px;}
 
   .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:7px 15px;border-radius:var(--r);font-size:12px;opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap;z-index:99;}
@@ -237,10 +242,32 @@ function setActive(idx) {
 }
 
 function advance(idx) {
-  if(!inputs[idx].value.trim()) return;
+  const val=inputs[idx].value.trim();
+  if(!val) return;
+  if(idx===1) {
+    const dup=rows.findIndex(r=>r[1].trim()===val);
+    if(dup!==-1){ rejectDuplicateSN(dup); return; }
+  }
   current=idx+1;
   if(current===3) commitRow();
   else setActive(current);
+}
+
+function rejectDuplicateSN(dupIndex) {
+  const inp=inputs[1];
+  inp.value=''; inp.classList.remove('is-filled');
+  inp.classList.remove('is-error'); void inp.offsetWidth; inp.classList.add('is-error');
+  setTimeout(()=>inp.classList.remove('is-error'),1800);
+  showToast('S/N ya capturado en la fila '+(dupIndex+1));
+  highlightRow(dupIndex);
+  if(mode==='scanner') setTimeout(()=>inp.focus(),30);
+}
+
+function highlightRow(dupIndex) {
+  const tr=document.querySelector('#data-body tr[data-row="'+dupIndex+'"]');
+  if(!tr) return;
+  tr.classList.remove('dup-row'); void tr.offsetWidth; tr.classList.add('dup-row');
+  tr.scrollIntoView({block:'nearest',behavior:'smooth'});
 }
 
 function fillCurrent(value) {
@@ -368,7 +395,7 @@ function renderTable(highlight) {
   if(!rows.length){body.innerHTML='<tr><td colspan="4" class="empty-state">Sin capturas - listo para escanear</td></tr>';return;}
   body.innerHTML=rows.slice().reverse().map((r,ri)=>{
     const n=rows.length-ri;
-    return`<tr class="${highlight&&ri===0?'new-row':''}">`+
+    return`<tr data-row="${n-1}" class="${highlight&&ri===0?'new-row':''}">`+
       `<td class="row-num">${n}</td><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`;
   }).join('');
 }
