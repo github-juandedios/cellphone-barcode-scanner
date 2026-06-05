@@ -366,14 +366,36 @@ async function startCamera() {
   st.textContent='Iniciando camara...'; st.className='camera-status';
   try {
     if(typeof ZXingBrowser==='undefined') throw new Error('libreria ZXing no cargada');
-    codeReader=new ZXingBrowser.BrowserMultiFormatReader();
-    const devices=await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
-    if(!devices.length) throw new Error('No se encontro ninguna camara');
-    let devId=devices[0].deviceId;
-    const rear=devices.find(d=>/back|rear|environment/i.test(d.label));
-    if(rear) devId=rear.deviceId;
+    // Decode hints. The S/N and P/N on these labels are dense 1D linear codes
+    // (Code 128 / Code 39); the EAN is EAN-13. Restricting to the formats that
+    // actually appear speeds up each frame and reduces misreads, and TRY_HARDER
+    // raises the decode rate on small/low-contrast bars.
+    // DecodeHintType is not exported by this bundle; its enum keys are numeric:
+    //   POSSIBLE_FORMATS = 2, TRY_HARDER = 3  (@zxing/library DecodeHintType).
+    const BF=ZXingBrowser.BarcodeFormat;
+    const hints=new Map();
+    hints.set(2,[BF.EAN_13,BF.EAN_8,BF.UPC_A,BF.UPC_E,BF.CODE_128,BF.CODE_39,BF.CODE_93,BF.ITF]);
+    hints.set(3,true);
+    codeReader=new ZXingBrowser.BrowserMultiFormatReader(hints);
+
+    // Prefer the rear camera. When labels are unavailable (permission not yet
+    // granted) fall back to facingMode:environment, which selects it reliably.
+    let devId=null;
+    try {
+      const devices=await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+      const rear=devices.find(d=>/back|rear|environment|trasera/i.test(d.label));
+      if(rear) devId=rear.deviceId;
+    } catch(e){}
+
+    // Request a high-resolution stream with continuous autofocus. The default
+    // (~640x480) cannot resolve the thin bars of the dense S/N and P/N codes,
+    // which is why the phone camera failed where the USB imager succeeds.
+    const constraints={video:{width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:'continuous'}]}};
+    if(devId) constraints.video.deviceId={exact:devId};
+    else constraints.video.facingMode={ideal:'environment'};
+
     const videoEl=document.getElementById('video');
-    scanControls=await codeReader.decodeFromVideoDevice(devId,videoEl,(result)=>{
+    scanControls=await codeReader.decodeFromConstraints(constraints,videoEl,(result)=>{
       if(!result) return;
       const txt=result.getText();
       const now=Date.now();
