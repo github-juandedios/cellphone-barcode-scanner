@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Captura de Códigos</title>
+<script src="https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:#f5f4f0;--surface:#fff;--surface2:#f0efe9;--border:#e0ddd5;--border2:#c8c5bc;
+    --text:#1a1917;--text2:#6b6860;--text3:#a09d97;
+    --blue-bg:#e8f0fb;--blue-bd:#a8c3f0;--blue-tx:#1a4fa0;
+    --green-bg:#e4f5ec;--green-bd:#7dd4a4;--green-tx:#0f6e3c;
+    --red-bg:#fff0f0;--red-bd:#f5c6c6;--red-tx:#c0392b;
+    --mono:'Courier New',Courier,monospace;--r:8px;--rl:12px;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --bg:#18181a;--surface:#232325;--surface2:#2c2c2e;--border:#3a3a3c;--border2:#4a4a4d;
+    --text:#f0efe9;--text2:#a09d97;--text3:#6b6860;
+    --blue-bg:#0e2044;--blue-bd:#2a5aaa;--blue-tx:#7faaee;
+    --green-bg:#0a2a1a;--green-bd:#2a7a50;--green-tx:#5dd4a0;
+    --red-bg:#2a1010;--red-bd:#5a2020;--red-tx:#f08080;
+  }}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column;align-items:center;padding:1.25rem 1rem 3rem;}
+  .container{width:100%;max-width:540px;}
+
+  header{margin-bottom:1.25rem;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+  header h1{font-size:18px;font-weight:600;letter-spacing:-0.3px;}
+  header p{font-size:12px;color:var(--text2);margin-top:3px;}
+
+  .mode-toggle{display:flex;border:0.5px solid var(--border2);border-radius:var(--r);overflow:hidden;flex-shrink:0;}
+  .mode-btn{padding:6px 10px;font-size:12px;font-weight:500;background:transparent;color:var(--text2);border:none;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background .12s,color .12s;}
+  .mode-btn.active{background:var(--blue-bg);color:var(--blue-tx);}
+  .mode-btn svg{width:14px;height:14px;}
+
+  .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:1.25rem;}
+  .stat{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--r);padding:9px 11px;}
+  .stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;}
+  .stat-value{font-size:20px;font-weight:600;color:var(--text);margin-top:1px;font-variant-numeric:tabular-nums;}
+
+  .info-note{background:var(--blue-bg);border:0.5px solid var(--blue-bd);border-radius:var(--r);padding:10px 13px;font-size:12px;color:var(--blue-tx);margin-bottom:1rem;display:none;line-height:1.5;}
+  .info-note.visible{display:block;}
+
+  .camera-panel{display:none;margin-bottom:1rem;}
+  .camera-panel.visible{display:block;}
+  .video-wrap{position:relative;background:#000;border-radius:var(--rl);overflow:hidden;border:0.5px solid var(--border);aspect-ratio:4/3;}
+  video{width:100%;height:100%;object-fit:cover;display:block;}
+  .scan-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+  .scan-frame{width:65%;max-width:220px;aspect-ratio:3/1;border:2px solid rgba(255,255,255,.75);border-radius:6px;box-shadow:0 0 0 2000px rgba(0,0,0,.35);}
+  .scan-line{position:absolute;left:17.5%;right:17.5%;height:2px;background:rgba(100,210,130,.9);border-radius:1px;animation:scanLine 1.6s ease-in-out infinite;}
+  @keyframes scanLine{0%{top:33%}50%{top:55%}100%{top:33%}}
+  .camera-label{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));color:#fff;font-size:13px;font-weight:500;padding:2rem 1rem .75rem;text-align:center;}
+  .camera-controls{display:flex;gap:8px;margin-top:8px;}
+  .camera-status{padding:8px 12px;border-radius:var(--r);font-size:12px;text-align:center;background:var(--surface2);color:var(--text2);border:0.5px solid var(--border);flex:1;}
+  .camera-status.error{background:var(--red-bg);color:var(--red-tx);border-color:var(--red-bd);}
+  .camera-status.ok{background:var(--green-bg);color:var(--green-tx);border-color:var(--green-bd);}
+
+  .capture-card{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--rl);padding:1.1rem;margin-bottom:1rem;transition:background .3s,border-color .3s;}
+  .capture-card.flash{animation:cardFlash .45s ease;}
+  @keyframes cardFlash{0%{background:var(--green-bg);border-color:var(--green-bd)}100%{background:var(--surface);border-color:var(--border)}}
+  .card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);margin-bottom:.9rem;}
+  .field-group{display:flex;flex-direction:column;gap:8px;}
+  .field-row{display:flex;align-items:center;gap:9px;}
+  .field-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text3);width:34px;flex-shrink:0;text-align:right;}
+  .field-input{flex:1;height:40px;padding:0 11px;border-radius:var(--r);border:1px solid var(--border);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:13px;letter-spacing:.5px;outline:none;transition:border-color .15s,background .15s,box-shadow .15s;}
+  .field-input::placeholder{color:var(--text3);font-size:11px;letter-spacing:0;font-family:inherit;}
+  .field-input:disabled{opacity:.4;cursor:not-allowed;}
+  .field-input.is-active{border-color:var(--blue-bd);background:var(--blue-bg);box-shadow:0 0 0 3px rgba(100,150,230,.12);}
+  .field-input.is-filled{border-color:var(--green-bd);background:var(--green-bg);color:var(--green-tx);}
+  .field-check{width:20px;height:20px;border-radius:50%;flex-shrink:0;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text3);transition:all .15s;}
+  .field-check.done{background:var(--green-bg);border-color:var(--green-bd);color:var(--green-tx);}
+  .progress-bar{height:3px;background:var(--border);border-radius:2px;margin-top:.9rem;overflow:hidden;}
+  .progress-fill{height:100%;background:var(--blue-bd);border-radius:2px;transition:width .25s ease;}
+  .progress-fill.complete{background:var(--green-bd);}
+
+  .actions{display:flex;gap:7px;margin-bottom:1.25rem;flex-wrap:wrap;}
+  .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;font-size:12px;font-weight:500;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;}
+  .btn:hover{background:var(--surface2);color:var(--text);}
+  .btn:active{transform:scale(.97);}
+  .btn svg{width:13px;height:13px;flex-shrink:0;}
+  .btn-danger{color:var(--red-tx);border-color:var(--red-bd);}
+  .btn-danger:hover{background:var(--red-bg);}
+  .btn-torch-on{background:var(--blue-bg)!important;color:var(--blue-tx)!important;}
+
+  .table-wrap{background:var(--surface);border:0.5px solid var(--border);border-radius:var(--rl);overflow:hidden;}
+  .table-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;border-bottom:0.5px solid var(--border);}
+  .table-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--text3);}
+  .table-count{font-size:11px;color:var(--text3);}
+  .tscroll{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:11px;min-width:320px;}
+  th{padding:7px 11px;text-align:left;background:var(--surface2);color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.6px;font-size:10px;border-bottom:0.5px solid var(--border);}
+  td{padding:7px 11px;border-bottom:0.5px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--text);}
+  tr:last-child td{border-bottom:none;}
+  td.row-num{color:var(--text3);font-size:10px;width:28px;}
+  tr.new-row td{animation:rowFlash .7s ease;}
+  @keyframes rowFlash{0%{background:var(--green-bg)}100%{background:transparent}}
+  .empty-state{padding:1.75rem;text-align:center;color:var(--text3);font-size:12px;}
+
+  .toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:7px 15px;border-radius:var(--r);font-size:12px;opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap;z-index:99;}
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div>
+      <h1>Captura de Códigos</h1>
+      <p>EAN &middot; S/N &middot; P/N por caja</p>
+    </div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="btn-scanner" onclick="setMode('scanner')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="3" height="18" rx="1"/><rect x="8" y="3" width="1.5" height="18" rx="0.5"/><rect x="11.5" y="3" width="3" height="18" rx="1"/><rect x="16.5" y="3" width="1.5" height="18" rx="0.5"/><rect x="19.5" y="3" width="1.5" height="18" rx="0.5"/></svg>
+        Lector USB
+      </button>
+      <button class="mode-btn" id="btn-camera" onclick="setMode('camera')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Cámara
+      </button>
+    </div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Cajas</div><div class="stat-value" id="stat-boxes">0</div></div>
+    <div class="stat"><div class="stat-label">Sesión</div><div class="stat-value" id="stat-time">0m</div></div>
+    <div class="stat"><div class="stat-label">Lectura</div><div class="stat-value" id="stat-scan">1 / 3</div></div>
+  </div>
+
+  <div class="info-note" id="info-note"></div>
+
+  <div class="camera-panel" id="camera-panel">
+    <div class="video-wrap">
+      <video id="video" playsinline muted></video>
+      <div class="scan-overlay">
+        <div class="scan-frame"></div>
+        <div class="scan-line"></div>
+      </div>
+      <div class="camera-label" id="camera-label">Apunta al código de barras</div>
+    </div>
+    <div class="camera-controls">
+      <div class="camera-status" id="camera-status">Iniciando cámara&hellip;</div>
+      <button class="btn" id="btn-torch" onclick="toggleTorch()" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L7 17l-4-4 11-11 4 4z"/><path d="M8 16l-4 4M13.5 3.5l7 7"/></svg>
+        Linterna
+      </button>
+    </div>
+  </div>
+
+  <div class="capture-card" id="capture-card">
+    <div class="card-title">Caja actual</div>
+    <div class="field-group">
+      <div class="field-row">
+        <span class="field-label">EAN</span>
+        <input class="field-input is-active" id="f-ean" placeholder="escanea EAN" autocomplete="off" inputmode="none" />
+        <div class="field-check" id="c-ean">1</div>
+      </div>
+      <div class="field-row">
+        <span class="field-label">S/N</span>
+        <input class="field-input" id="f-sn" placeholder="escanea n&uacute;m. de serie" autocomplete="off" inputmode="none" disabled />
+        <div class="field-check" id="c-sn">2</div>
+      </div>
+      <div class="field-row">
+        <span class="field-label">P/N</span>
+        <input class="field-input" id="f-pn" placeholder="escanea n&uacute;m. de parte" autocomplete="off" inputmode="none" disabled />
+        <div class="field-check" id="c-pn">3</div>
+      </div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn" onclick="exportCSV()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+      Exportar CSV
+    </button>
+    <button class="btn" onclick="copyLast()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      Copiar &uacute;ltima
+    </button>
+    <button class="btn btn-danger" onclick="clearAll()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+      Limpiar sesi&oacute;n
+    </button>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">
+      <span class="table-title">Cajas capturadas</span>
+      <span class="table-count" id="table-count">0 registros</span>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>#</th><th>EAN</th><th>S/N</th><th>P/N</th></tr></thead>
+        <tbody id="data-body">
+          <tr><td colspan="4" class="empty-state">Sin capturas &mdash; listo para escanear</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const rows = [];
+let current = 0;
+let mode = 'scanner';
+const sessionStart = Date.now();
+
+const inputs = ['ean','sn','pn'].map(id => document.getElementById('f-'+id));
+const checks = ['ean','sn','pn'].map(id => document.getElementById('c-'+id));
+const card   = document.getElementById('capture-card');
+const prog   = document.getElementById('progress');
+
+setInterval(() => {
+  const m = Math.floor((Date.now()-sessionStart)/60000);
+  document.getElementById('stat-time').textContent = m+'m';
+}, 15000);
+
+function setActive(idx) {
+  inputs.forEach((inp,i) => {
+    inp.disabled = mode==='camera' ? true : i!==idx;
+    inp.classList.remove('is-active','is-filled');
+    if(i<idx) inp.classList.add('is-filled');
+    if(i===idx && mode==='scanner') inp.classList.add('is-active');
+  });
+  checks.forEach((c,i) => {
+    c.classList.remove('done');
+    if(i<idx){c.classList.add('done');c.textContent='✓';}
+    else c.textContent=i+1;
+  });
+  prog.style.width=((idx/3)*100)+'%';
+  prog.classList.toggle('complete',idx===3);
+  document.getElementById('stat-scan').textContent=(Math.min(idx,2)+1)+' / 3';
+  if(mode==='scanner'&&idx<3) setTimeout(()=>inputs[idx].focus(),30);
+  if(mode==='camera') updateCamLabel(idx);
+}
+
+function advance(idx) {
+  if(!inputs[idx].value.trim()) return;
+  current=idx+1;
+  if(current===3) commitRow();
+  else setActive(current);
+}
+
+function fillCurrent(value) {
+  if(current>=3||!value.trim()) return;
+  inputs[current].value=value.trim();
+  inputs[current].classList.add('is-filled');
+  setTimeout(()=>advance(current),130);
+}
+
+function commitRow() {
+  const vals=inputs.map(f=>f.value.trim());
+  rows.push(vals);
+  renderTable(true);
+  document.getElementById('stat-boxes').textContent=rows.length;
+  document.getElementById('table-count').textContent=rows.length+(rows.length===1?' registro':' registros');
+  card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+  resetFields();
+}
+
+function resetFields() {
+  current=0;
+  inputs.forEach(inp=>{inp.value='';inp.disabled=true;inp.classList.remove('is-active','is-filled');});
+  prog.style.width='0%'; prog.classList.remove('complete');
+  setTimeout(()=>setActive(0),60);
+}
+
+inputs.forEach((inp,idx)=>{
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();advance(idx);}
+  });
+  inp.addEventListener('input',()=>{
+    if(current!==idx) return;
+    clearTimeout(inp._t);
+    inp._t=setTimeout(()=>{if(inp.value.trim()) advance(idx);},100);
+  });
+});
+
+function setMode(m) {
+  mode=m;
+  document.getElementById('btn-scanner').classList.toggle('active',m==='scanner');
+  document.getElementById('btn-camera').classList.toggle('active',m==='camera');
+  const panel=document.getElementById('camera-panel');
+  const note=document.getElementById('info-note');
+  if(m==='camera') {
+    panel.classList.add('visible');
+    const secure=location.protocol==='https:'||/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    if(!secure) {
+      note.textContent='La camara requiere HTTPS. Sirve este archivo desde un servidor local (ej. npx serve .) o publlicalo en HTTPS. El modo Lector USB funciona desde file://.';
+      note.classList.add('visible');
+      document.getElementById('camera-status').textContent='Se necesita HTTPS para acceder a la camara.';
+      document.getElementById('camera-status').className='camera-status error';
+    } else {
+      note.classList.remove('visible');
+      startCamera();
+    }
+  } else {
+    panel.classList.remove('visible');
+    note.classList.remove('visible');
+    stopCamera();
+    setActive(current);
+    if(inputs[current]) setTimeout(()=>inputs[current].focus(),60);
+  }
+}
+
+let codeReader=null, scanControls=null, torchTrack=null, torchOn=false;
+let lastCode='', lastCodeTime=0;
+
+async function startCamera() {
+  const st=document.getElementById('camera-status');
+  st.textContent='Iniciando camara...'; st.className='camera-status';
+  try {
+    if(typeof ZXingBrowser==='undefined') throw new Error('libreria ZXing no cargada');
+    codeReader=new ZXingBrowser.BrowserMultiFormatReader();
+    const devices=await ZXingBrowser.BrowserCodeReader.listVideoInputDevices();
+    if(!devices.length) throw new Error('No se encontro ninguna camara');
+    let devId=devices[0].deviceId;
+    const rear=devices.find(d=>/back|rear|environment/i.test(d.label));
+    if(rear) devId=rear.deviceId;
+    const videoEl=document.getElementById('video');
+    scanControls=await codeReader.decodeFromVideoDevice(devId,videoEl,(result)=>{
+      if(!result) return;
+      const txt=result.getText();
+      const now=Date.now();
+      if(txt===lastCode&&now-lastCodeTime<1800) return;
+      lastCode=txt; lastCodeTime=now;
+      fillCurrent(txt);
+    });
+    const stream=videoEl.srcObject;
+    if(stream) {
+      const track=stream.getVideoTracks()[0];
+      if(track){
+        torchTrack=track;
+        const caps=track.getCapabilities?track.getCapabilities():{};
+        if(caps.torch) document.getElementById('btn-torch').style.display='';
+      }
+    }
+    st.textContent='Camara lista - apunta al codigo'; st.className='camera-status ok';
+    setActive(0);
+  } catch(err) {
+    st.textContent='Error: '+err.message; st.className='camera-status error';
+  }
+}
+
+function stopCamera() {
+  try{if(scanControls) scanControls.stop();}catch(e){}
+  try{if(codeReader) codeReader.reset();}catch(e){}
+  scanControls=null; codeReader=null; torchTrack=null;
+  document.getElementById('btn-torch').style.display='none';
+}
+
+function toggleTorch() {
+  if(!torchTrack) return;
+  torchOn=!torchOn;
+  torchTrack.applyConstraints({advanced:[{torch:torchOn}]}).catch(()=>{});
+  document.getElementById('btn-torch').classList.toggle('btn-torch-on',torchOn);
+}
+
+function updateCamLabel(idx) {
+  const lbl=['EAN','S/N','P/N'];
+  document.getElementById('camera-label').textContent=idx<3?'Escanea -> '+lbl[idx]:'Caja capturada';
+}
+
+function renderTable(highlight) {
+  const body=document.getElementById('data-body');
+  if(!rows.length){body.innerHTML='<tr><td colspan="4" class="empty-state">Sin capturas - listo para escanear</td></tr>';return;}
+  body.innerHTML=rows.slice().reverse().map((r,ri)=>{
+    const n=rows.length-ri;
+    return`<tr class="${highlight&&ri===0?'new-row':''}">`+
+      `<td class="row-num">${n}</td><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`;
+  }).join('');
+}
+
+function exportCSV() {
+  if(!rows.length){showToast('Sin datos para exportar');return;}
+  const csv='EAN,S/N,P/N\n'+rows.map(r=>r.map(v=>`"${v}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='codigos_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); showToast('CSV descargado');
+}
+
+function copyLast() {
+  if(!rows.length){showToast('Sin capturas aun');return;}
+  navigator.clipboard.writeText(rows[rows.length-1].join('\t')).then(()=>showToast('Ultima fila copiada'));
+}
+
+function clearAll() {
+  if(!rows.length) return;
+  if(!confirm('Borrar los '+rows.length+' registros de esta sesion?')) return;
+  rows.length=0;
+  document.getElementById('stat-boxes').textContent=0;
+  document.getElementById('table-count').textContent='0 registros';
+  renderTable(false); resetFields();
+}
+
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+
+setActive(0);
+inputs[0].focus();
+</script>
+</body>
+</html>
