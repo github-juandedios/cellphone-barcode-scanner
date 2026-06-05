@@ -1,0 +1,9 @@
+# Cross-cutting filesystem paths read by several setup steps and by runtime
+# scripts. Each value is per-project; the workspace folder name is treated as
+# the project name (read from Path.cwd().name).
+#
+# Read by: credentials.py, datawork.py, vscode.py, verify.py,
+#          scripts/utils/config_loader.py (runtime).
+
+config_home: ~/.config                       # where <project_name>.env lives (chmod 600 on creation)
+datawork: ~/DataWork/github-juandedios      # working data root; datawork.py creates <datawork>/<project>/ on first run. Mirrors the GitHub URL namespace so local and remote share one identifier.

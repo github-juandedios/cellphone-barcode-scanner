@@ -1,0 +1,7 @@
+# Git / GitHub wiring defaults. Edit per project if defaults need to differ.
+# Read at setup time by git.py.
+
+remote_host: github.com
+branch: main
+visibility: private          # private | public
+commit_message: "Initial commit from template"

@@ -1,0 +1,5 @@
+# Runtime config. Read by setup_logging() in scripts/utils/logger.py.
+# Setup-time config lives in settings/paths.yaml, python_env.yaml, git.yaml, vscode.yaml.
+
+logging:
+  level: INFO          # DEBUG | INFO | WARNING | ERROR | CRITICAL

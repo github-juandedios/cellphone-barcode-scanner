@@ -1,0 +1,7 @@
+# Business rules
+
+Document domain logic and decisions the code alone does not make obvious: what a
+field means, why a threshold or cutoff is set, how a known edge case is handled,
+which source is authoritative when two disagree.
+
+Copy to `business_rules.md` (drop the `.example` suffix) once you start filling it.

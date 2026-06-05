@@ -1,0 +1,28 @@
+# Orchestrator configuration for settings/apply.py.
+#
+# apply.py discovers every settings/*.py and runs each one's run() function
+# in alphabetical order. Files listed under 'skip' are excluded. apply.py
+# never runs itself, regardless of patterns.
+#
+# Patterns use fnmatch syntax (shell glob, not regex), case-sensitive,
+# matched against the filename only.
+#
+# Why shared.py is skipped by design:
+#   shared.py is the library imported by every step (REPO_ROOT, PROJECT_NAME,
+#   log, yaml loaders). It has no run() function, so without this entry
+#   apply.py would import it as a module and report 'no run() function' on
+#   every invocation. Listing it here states the exclusion intentionally.
+#
+# Why _[!_]* is skipped:
+#   A single leading underscore marks a file as out of scope — the project-wide
+#   skip rule (see docs/project/conventions.md#naming). The pattern matches a
+#   name starting with one underscore followed by a non-underscore, so local
+#   work-in-progress like _draft_step.py is ignored while Python dunders
+#   (__init__.py) are not. Such files are also gitignored, so they never ship.
+#
+# To hide additional Python files from discovery (libraries, helpers you do
+# not want apply.py to invoke), add patterns to this list.
+
+skip:
+  - shared.py
+  - "_[!_]*"

@@ -1,0 +1,41 @@
+# Credentials (never commit). Real credentials live at ~/.config/<project_name>.env.
+.env
+.env.local
+*.pem
+secrets/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+.idea/
+
+# VS Code workspace file is generated, machine-specific
+*.code-workspace
+
+# Output: track structure of log/ and playground/; artifacts is content-ignored.
+output/artifacts/**
+!output/artifacts/.gitkeep
+output/log/**
+!output/log/.gitkeep
+output/playground/**
+!output/playground/.gitkeep
+
+# Deprecated holding area
+deprecated/**/*
+!deprecated/.gitkeep
+
+# Skip marker: a single leading underscore excludes a file or folder from git
+# and from directory walkers (apply.py). Rename to drop the underscore to bring
+# an item back into scope. See docs/project/conventions.md#naming. Python
+# dunders (__init__.py, __pycache__/) use two underscores and are unaffected.
+_[!_]*

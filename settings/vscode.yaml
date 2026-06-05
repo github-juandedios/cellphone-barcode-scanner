@@ -1,0 +1,32 @@
+# Multi-root VS Code workspace folders.
+# Substitutions applied by vscode.py:
+#   {project}   -> workspace folder name
+#   {datawork} -> paths.yaml::datawork (~ expanded)
+# A leading '~' in a path is also expanded.
+# Relative paths resolve against the .code-workspace file's directory
+# (the project root), so "." is the project root itself.
+# Read at setup time by vscode.py.
+
+folders:
+  - { name: "-- Developer --", path: "." }
+  - { name: "-- DataWork --",  path: "{datawork}/{project}" }
+
+# Optional workspace-level VS Code settings, passed through verbatim into
+# the .code-workspace `settings` block. Keep keys VS Code understands.
+# The interpreter pin below binds the Python extension to the uv-managed
+# .venv inside the "-- Developer --" folder; if that folder name changes
+# above, update the ${workspaceFolder:<name>} reference here to match.
+# `activateEnvironment: false` is intentional: the runbook uses `uv run`,
+# so terminals should not auto-activate the venv.
+#
+# `workbench.colorCustomizations` tints the status bar so each open
+# workspace is identifiable at a glance. The factory tints its title
+# bar crimson; derived projects tint the status bar with this muted
+# teal and override the hex per project (any 6-digit hex works).
+settings:
+  python.defaultInterpreterPath: "${workspaceFolder:-- Developer --}/.venv/bin/python"
+  python.terminal.activateEnvironment: false
+  workbench.colorCustomizations:
+    statusBar.background: "#1f4d4d"
+    statusBar.foreground: "#ffffff"
+    statusBarItem.hoverBackground: "#2a6363"

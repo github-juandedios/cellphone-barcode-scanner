@@ -1,0 +1,8 @@
+# Python toolchain expectations. Edit if a project needs a different toolchain.
+# Read by python_env.py.
+#
+# Cross-cutting paths (config_home, datawork) live in settings/paths.yaml.
+
+required_tools:
+  - homebrew
+  - uv

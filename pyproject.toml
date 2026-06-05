@@ -1,0 +1,10 @@
+[project]
+# name/description are neutral placeholders; the authoritative project name is
+# the workspace folder name (see docs/project/conventions.md#naming).
+name = "workspace"
+version = "0.1.0"
+description = "Data science workspace."
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0",
+]
