@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Captura de Códigos</title>
 <script src="vendor/zxing-browser-0.1.5.min.js"></script>
+<script src="data/serial_lookup.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
@@ -81,6 +82,20 @@
   .progress-bar{height:3px;background:var(--border);border-radius:2px;margin-top:.9rem;overflow:hidden;}
   .progress-fill{height:100%;background:var(--blue-bd);border-radius:2px;transition:width .25s ease;}
   .progress-fill.complete{background:var(--green-bd);}
+
+  .lookup{display:none;gap:12px;margin-top:.9rem;padding:11px;border-radius:var(--r);border:0.5px solid var(--green-bd);background:var(--green-bg);align-items:stretch;}
+  .lookup.visible{display:flex;}
+  .lookup.unknown{background:var(--red-bg);border-color:var(--red-bd);}
+  .lookup-img{width:clamp(130px,42%,180px);height:min(60vh,360px);object-fit:contain;border-radius:8px;background:#fff;border:0.5px solid var(--border);padding:6px;flex-shrink:0;}
+  .lookup-img.hide{display:none;}
+  .lookup-body{min-width:0;flex:1;display:flex;flex-direction:column;}
+  .lookup-model{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--text);letter-spacing:.3px;}
+  .lookup.unknown .lookup-model{color:var(--red-tx);}
+  .lookup-name{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:7;line-clamp:7;-webkit-box-orient:vertical;overflow:hidden;}
+  .lookup-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:8px;flex-wrap:wrap;}
+  .lookup-factura{font-size:10px;color:var(--text3);white-space:nowrap;}
+  .lookup-count{font-size:11px;font-weight:700;color:var(--green-tx);background:var(--surface);border:0.5px solid var(--green-bd);border-radius:999px;padding:2px 10px;white-space:nowrap;font-variant-numeric:tabular-nums;}
+  .lookup.unknown .lookup-count{display:none;}
 
   .actions{display:flex;gap:7px;margin-bottom:1.25rem;flex-wrap:wrap;}
   .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;font-size:12px;font-weight:500;border-radius:var(--r);border:0.5px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;}
@@ -176,6 +191,17 @@
       </div>
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progress" style="width:0%"></div></div>
+    <div class="lookup" id="lookup-panel">
+      <img class="lookup-img" id="lookup-img" alt="" />
+      <div class="lookup-body">
+        <div class="lookup-model" id="lookup-model"></div>
+        <div class="lookup-name" id="lookup-name"></div>
+        <div class="lookup-meta">
+          <span class="lookup-factura" id="lookup-factura"></span>
+          <span class="lookup-count" id="lookup-count"></span>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="actions">
@@ -221,6 +247,43 @@ const card   = document.getElementById('capture-card');
 const prog   = document.getElementById('progress');
 const scan   = document.getElementById('scan-input');
 
+// Serial catalog bundled at build time (scripts/transform/build_serial_lookup.py).
+// Keyed by S/N -> {provider_model, name, image_path, factura_date, tvc_model}.
+const lookupData = window.SERIAL_LOOKUP || {};
+// Per-model running tally for the current session, keyed by provider_model.
+// Counts committed boxes only (see commitRow); cleared with the session.
+const modelCounts = new Map();
+const lookupPanel = document.getElementById('lookup-panel');
+
+// Render the catalog card for a scanned S/N. Found -> provider model, image,
+// description, invoice date, and how many boxes of that model are already
+// committed this session. Not in catalog -> warn, but capture still proceeds.
+function showLookup(sn) {
+  const e = lookupData[(sn||'').trim()];
+  const img = document.getElementById('lookup-img');
+  if(!e) {
+    lookupPanel.classList.add('visible','unknown');
+    document.getElementById('lookup-model').textContent = 'Modelo no identificado';
+    document.getElementById('lookup-name').textContent = 'El S/N no está en el catálogo. La caja se captura igual.';
+    document.getElementById('lookup-factura').textContent = '';
+    img.classList.add('hide');
+    return;
+  }
+  lookupPanel.classList.remove('unknown');
+  lookupPanel.classList.add('visible');
+  document.getElementById('lookup-model').textContent = e.provider_model || e.tvc_model || '';
+  document.getElementById('lookup-name').textContent = e.name || '';
+  document.getElementById('lookup-factura').textContent = e.factura_date ? 'Factura: '+e.factura_date : '';
+  const n = modelCounts.get(e.provider_model) || 0;
+  document.getElementById('lookup-count').textContent = n+(n===1?' caja en sesión':' cajas en sesión');
+  if(e.image_path){ img.onerror=()=>img.classList.add('hide'); img.src=e.image_path; img.classList.remove('hide'); }
+  else { img.classList.add('hide'); }
+}
+
+function hideLookup() {
+  lookupPanel.classList.remove('visible','unknown');
+}
+
 setInterval(() => {
   const m = Math.floor((Date.now()-sessionStart)/60000);
   document.getElementById('stat-time').textContent = m+'m';
@@ -251,6 +314,7 @@ function ingest(value) {
   inp.value = idx===0 ? value.replace(/\s+/g,'') : value;
   inp.classList.add('is-filled');
   inp.classList.remove('flash'); void inp.offsetWidth; inp.classList.add('flash');
+  if(idx===1) showLookup(inp.value);     // S/N read -> show catalog card + model tally
   refreshProgress();
   if(inputs.every(i=>i.value.trim())) setTimeout(commitRow,220);
   if(mode==='scanner') focusScan();
@@ -290,6 +354,9 @@ function commitRow() {
   // existing row and continue -- no second copy, no error.
   const dup=rows.findIndex(r=>r[1]===vals[1]);
   if(dup!==-1){ flashExistingRow(dup); resetFields(); return; }
+  // Count this box against its model (provider_model from the S/N catalog).
+  const e=lookupData[vals[1]];
+  if(e&&e.provider_model) modelCounts.set(e.provider_model,(modelCounts.get(e.provider_model)||0)+1);
   rows.push(vals);
   renderTable(true);
   document.getElementById('stat-boxes').textContent=rows.length;
@@ -307,6 +374,7 @@ function flashExistingRow(idx) {
 
 function resetFields() {
   inputs.forEach(inp=>{inp.value='';inp.classList.remove('is-active','is-filled','flash');});
+  hideLookup();
   scan.value='';
   setTimeout(()=>{refreshProgress(); if(mode==='scanner') focusScan();},60);
 }
@@ -466,6 +534,7 @@ function clearAll() {
   if(!rows.length) return;
   if(!confirm('Borrar los '+rows.length+' registros de esta sesion?')) return;
   rows.length=0;
+  modelCounts.clear();
   document.getElementById('stat-boxes').textContent=0;
   document.getElementById('table-count').textContent='0 registros';
   renderTable(false); resetFields();
